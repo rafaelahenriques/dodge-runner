@@ -1,51 +1,68 @@
 # Motion Balance Game
-
-Motion Balance Game is a one-to-one WebRTC experience where your phone becomes a motion controller. By tilting your phone, you control a ball and try to keep it balanced on a platform displayed on the desktop screen.
+A one-to-one WebRTC experience where your phone becomes a motion controller. Tilt your phone to move a ball and dodge obstacles on the desktop screen.
 
 ---
 
 ## How to run
-
 ```bash
 npm install
 npm start
 ```
 
-Open the printed local IP address in your browser (for example `http://192.168.0.201:3000`).
-Do not use `localhost`, otherwise the QR code won't work when scanning it from your phone.
+Open the printed local IP address in your browser (for example `https://192.168.0.201:3000`).
+
+Do not use `localhost` — the QR code won't work on your phone from there. The server runs over HTTPS, so your browser will show a security warning for the self-signed certificate. Click "Advanced" and proceed.
 
 ---
 
 ## Development Diary
 
-### Week 1 — Reaching a first working MVP
+### Week 1 — Getting the pipeline working
 
-The focus this week was getting the entire pipeline working end-to-end: the server, signalling, WebRTC connection, gyroscope input, and a visible response on screen. The goal wasn't to build a polished game yet, but to prove that all the moving parts could talk to each other reliably.
+The goal this week wasn't to build a game. It was to prove that all the pieces could talk to each other: the server, the signalling, the WebRTC connection, and the gyroscope input.
 
-I started by setting up the project structure, configuring an Express server with Socket.io, and creating both the desktop and controller pages. From the beginning, the project followed GitHub Flow: development happened on a `feature/project-setup` branch off `dev`, keeping `main` clean and stable.
+I set up an Express server with Socket.io and built both the desktop and controller pages. The project used GitHub Flow from the start, with feature branches off `dev` to keep `main` stable.
 
-For signalling, I reused the same approach shown in class. Socket.io handles the handshake by relaying `peerOffer`, `peerAnswer`, and `peerIce` messages between devices, and then steps out of the way once the connection is established. Unlike the class examples, this project doesn't use video or audio streams. Instead, it relies on a WebRTC data channel to send small amounts of tilt data. That required a slightly different setup and some extra research beyond the provided examples.
+The signalling follows the same pattern from class — Socket.io relays `peerOffer`, `peerAnswer`, and `peerIce` between devices, then steps aside once the connection is established. The difference here is that there's no video or audio. Everything runs through a WebRTC data channel, which required some extra research beyond the class examples.
 
-Once the WebRTC connection was stable, implementing the gyroscope input was relatively straightforward. The controller reads `beta` and `gamma` values from the `DeviceOrientationEvent` and sends them as JSON over the data channel whenever the phone moves. On the desktop side, those values are used to update the ball's movement.
+The gyroscope part was more straightforward. The controller reads `beta` and `gamma` from `DeviceOrientationEvent` and sends them as JSON over the data channel. The desktop receives them and moves the ball.
 
-One of the biggest challenges this week turned out not to be code-related at all. On iPhone, the app kept returning "motion permission denied," even though the permission request was implemented correctly. After investigating, it became clear that iOS blocks access to motion sensors on plain `http://` pages. The workaround was to use ngrok to tunnel the local server through an `https://` connection:
+The biggest challenge wasn't the code — it was iOS. The app kept returning "motion permission denied" even though the permission request looked correct. After digging into it, the issue was that iOS blocks motion sensors on plain `http://` pages. I used ngrok as a temporary fix:
 
 ```bash
 ngrok http 3000
 ```
 
-This solved the issue and allowed the permission prompt to appear. However, it's only a temporary solution, since the ngrok URL doesn't show the QR code correctly. Finding a more stable local HTTPS setup is something to revisit later.
+That got the permission prompt working, but the ngrok URL broke the QR code. Good enough to unblock progress, but not a real solution.
 
-By the end of the week, the core loop was working: open the desktop page, navigate to the URL manually, tap "Enable Motion" on the phone, and tilt the device to move the ball. That completed the MVP for week one.
+By the end of the week the basic loop worked: scan the QR, tap "Enable Motion," tilt the phone, ball moves. MVP done.
+
+---
+
+### Week 2 — HTTPS and first game mechanics
+
+Two things happened this week: the HTTPS problem got a real fix, and the project became an actual game.
+
+For HTTPS, I generated a self-signed certificate with `openssl` and updated the server to load it in development using a `NODE_ENV` variable and `dotenv`. In production it falls back to plain `http`, since hosting platforms handle SSL themselves. The certificate files and `.env` are in `.gitignore` so they don't end up in the repo. This went on a `feature/https` branch and merged into `main`.
+
+With that sorted, I reconsidered the game concept. The original idea — balancing a ball on a platform — didn't give the controls much purpose. After thinking it through, I switched to an endless runner: the ball sits at the bottom across three lanes, obstacles fall from the top, and you tilt to dodge. It's a better fit for the controls and simple enough to actually finish.
+
+The mechanics came together across two branches. On `feature/ball-movement`, I removed vertical movement, fixed the ball near the bottom, constrained it to three lane positions, and drew lane dividers on the canvas. On `feature/obstacles`, I added a spawner that drops rectangles into random lanes every 1.5 seconds. They move down each frame and get removed when they leave the screen.
+
+The runner loop is now visible. Next up: collision detection and scoring.
 
 ---
 
 ## AI Reflection
 
-I used Claude (Anthropic) as a coding assistant during this week.
+I used Claude (Anthropic) as an assistant throughout this project.
 
 The parts that were close to the class material — such as the server setup, Socket.io signalling, and QR code generation — followed patterns we had already seen. For areas that went beyond the examples, like setting up a WebRTC data channel and handling iOS motion permissions, I used AI to help explore implementation details and understand how the pieces fit together.
 
 AI was helpful for speeding up development and getting unstuck when working with unfamiliar APIs. At the same time, the iOS permission issue was a good reminder that not every problem is a code bug. Understanding why something fails and reasoning about platform constraints still required manual investigation and critical thinking beyond what AI could directly provide.
 
-In the coming weeks, this technical foundation will be expanded with actual game mechanics and refinements to the interaction.
+Some parts were written with significant AI help. The obstacle system (`spawnObstacle`, the lane positions, the spawn interval) was largely written by AI, though built up step by step with explanations along the way. Same for the rewrite of `update` and `draw` when the game concept shifted to a runner.
+
+What helped most in those moments wasn't just getting the code — it was being asked questions before and after. Things like "what do you think this line does?". That approach forced me to think through the logic rather than just copy a solution. By the time the code was written, I understood why it worked.
+
+The most useful thing overall was using AI to understand, not just to produce.
