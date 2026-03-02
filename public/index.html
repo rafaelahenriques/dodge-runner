@@ -164,10 +164,12 @@
     };
 
     const startGame = () => {
-      ball.x = $canvas.width / 2;
-      ball.y = $canvas.height / 2;
+      ball.x = 300; // start in middle lane
+      ball.y = $canvas.height - 60;
+      ball.vx = 0;
+      ball.vy = 0;
       requestAnimationFrame(gameLoop);
-    };
+  };
 
     const gameLoop = () => {
       update();
@@ -176,28 +178,32 @@
     };
 
     const update = () => {
-      const gravity = 0.3;
-      ball.vx += tiltX * gravity;
-      ball.vy += tiltY * gravity;
-
-      // Simple friction
+      ball.vx += tiltX * 0.3;
       ball.vx *= 0.95;
-      ball.vy *= 0.95;
-
       ball.x += ball.vx;
-      ball.y += ball.vy;
-
-      // Clamp to canvas
-      ball.x = Math.max(20, Math.min($canvas.width  - 20, ball.x));
-      ball.y = Math.max(20, Math.min($canvas.height - 20, ball.y));
+      ball.x = Math.max(100, Math.min(500, ball.x));
+      ball.y = $canvas.height - 60; // fixed near bottom
     };
 
     const draw = () => {
       ctx.clearRect(0, 0, $canvas.width, $canvas.height);
 
-      // Platform
+      // Background
       ctx.fillStyle = '#1a1a2e';
       ctx.fillRect(0, 0, $canvas.width, $canvas.height);
+
+      // Lane dividers
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(200, 0);
+      ctx.lineTo(200, $canvas.height);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(400, 0);
+      ctx.lineTo(400, $canvas.height);
+      ctx.stroke();
 
       // Ball
       ctx.beginPath();
