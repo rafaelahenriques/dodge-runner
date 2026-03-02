@@ -1,219 +1,216 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Balance Game</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-      background: #0f0f0f;
-      color: #fff;
-      font-family: sans-serif;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
-    }
-
-    #setup {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 1rem;
-    }
-
-    #setup p { opacity: 0.5; font-size: 0.9rem; }
-
-    canvas {
-      display: none;
-      border: 2px solid #333;
-      border-radius: 8px;
-    }
-
-    #status {
-      position: absolute;
-      top: 1rem;
-      font-size: 0.85rem;
-      opacity: 0.4;
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Balance Game</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #0f0f0f;
+  color: #fff;
+  font-family: sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+}
+#setup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+#setup p { opacity: 0.5; font-size: 0.9rem; }
+canvas {
+  display: none;
+  border: 2px solid #333;
+  border-radius: 8px;
+}
+#status {
+  position: absolute;
+  top: 1rem;
+  font-size: 0.85rem;
+  opacity: 0.4;
+}
+</style>
 </head>
 <body>
+<span id="status">waiting for controller...</span>
+<div id="setup">
+  <p>Scan to connect your phone</p>
+  <div id="qr"></div>
+  <a id="url" href=""></a>
+</div>
+<canvas id="gameCanvas" width="600" height="600"></canvas>
+<script src="/socket.io/socket.io.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"
+  integrity="sha512-ZDSPMa/JM1D+7kdg2x3BsruQ6T/JpJo3jWDWkCZsP+5yVyp1KfESqLI+7RqB5k24F7p2cV7i2YHh/890y6P6Sw=="
+  crossorigin="anonymous"></script>
+<script type="module">
+  const $status  = document.getElementById('status');
+  const $setup   = document.getElementById('setup');
+  const $canvas  = document.getElementById('gameCanvas');
+  const $qr      = document.getElementById('qr');
+  const $url     = document.getElementById('url');
+  const ctx      = $canvas.getContext('2d');
 
-  <span id="status">waiting for controller...</span>
+  let socket;
+  let peerConnection;
+  let dataChannel;
+  const pendingRemoteIce = [];
+  const servers = {
+    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+  };
 
-  <div id="setup">
-    <p>Scan to connect your phone</p>
-    <div id="qr"></div>
-    <a id="url" href=""></a>
-  </div>
+  // --- QR + signalling setup ---
+  const initSocket = () => {
+    socket = io.connect('/');
+    socket.on('connect', () => {
+      console.log(`Connected: ${socket.id}`);
+      const url = `${new URL(`/controller.html?id=${socket.id}`, window.location)}`;
+      $url.textContent = url;
+      $url.setAttribute('href', url);
+      const qr = qrcode(4, 'L');
+      qr.addData(url);
+      qr.make();
+      $qr.innerHTML = qr.createImgTag(4);
+    });
 
-  <canvas id="gameCanvas" width="600" height="600"></canvas>
+    socket.on('peerOffer', async (myId, offer, peerId) => {
+      await answerOffer(offer, peerId);
+    });
 
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"
-    integrity="sha512-ZDSPMa/JM1D+7kdg2x3BsruQ6T/JpJo3jWDWkCZsP+5yVyp1KfESqLI+7RqB5k24F7p2cV7i2YHh/890y6P6Sw=="
-    crossorigin="anonymous"></script>
-  <script type="module">
-
-    const $status  = document.getElementById('status');
-    const $setup   = document.getElementById('setup');
-    const $canvas  = document.getElementById('gameCanvas');
-    const $qr      = document.getElementById('qr');
-    const $url     = document.getElementById('url');
-    const ctx      = $canvas.getContext('2d');
-
-    let socket;
-    let peerConnection;
-    let dataChannel;
-    const pendingRemoteIce = [];
-
-    const servers = {
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-    };
-
-    // --- QR + signalling setup ---
-
-    const initSocket = () => {
-      socket = io.connect('/');
-
-      socket.on('connect', () => {
-        console.log(`Connected: ${socket.id}`);
-        const url = `${new URL(`/controller.html?id=${socket.id}`, window.location)}`;
-        $url.textContent = url;
-        $url.setAttribute('href', url);
-
-        const qr = qrcode(4, 'L');
-        qr.addData(url);
-        qr.make();
-        $qr.innerHTML = qr.createImgTag(4);
-      });
-
-      // Receive offer from controller
-      socket.on('peerOffer', async (myId, offer, peerId) => {
-        console.log(`Received peerOffer from ${peerId}`);
-        await answerOffer(offer, peerId);
-      });
-
-      socket.on('peerAnswer', async (myId, answer, peerId) => {
-        if (!peerConnection || !answer) return;
-        await peerConnection.setRemoteDescription(answer);
-        while (pendingRemoteIce.length) {
-          await peerConnection.addIceCandidate(pendingRemoteIce.shift());
-        }
-      });
-
-      socket.on('peerIce', async (myId, candidate, peerId) => {
-        if (!candidate) return;
-        if (!peerConnection) { pendingRemoteIce.push(candidate); return; }
-        await peerConnection.addIceCandidate(candidate);
-      });
-    };
-
-    // --- WebRTC: answer incoming offer, set up data channel ---
-
-    const answerOffer = async (offer, peerId) => {
-      if (peerConnection) peerConnection.close();
-      pendingRemoteIce.length = 0;
-
-      peerConnection = new RTCPeerConnection(servers);
-
-      peerConnection.onicecandidate = event => {
-        if (!event.candidate) return;
-        socket.emit('peerIce', peerId, event.candidate);
-      };
-
-      // Data channel arrives from controller
-      peerConnection.ondatachannel = event => {
-        dataChannel = event.channel;
-        dataChannel.onopen = () => {
-          console.log('Data channel open');
-          $status.textContent = 'controller connected ✓';
-          $setup.style.display = 'none';
-          $canvas.style.display = 'block';
-          startGame();
-        };
-        dataChannel.onmessage = event => {
-          const { beta, gamma } = JSON.parse(event.data);
-          onTiltData(beta, gamma);
-        };
-      };
-
-      await peerConnection.setRemoteDescription(offer);
-      const answer = await peerConnection.createAnswer();
-      await peerConnection.setLocalDescription(answer);
-      socket.emit('peerAnswer', peerId, answer);
-
+    socket.on('peerAnswer', async (myId, answer, peerId) => {
+      if (!peerConnection || !answer) return;
+      await peerConnection.setRemoteDescription(answer);
       while (pendingRemoteIce.length) {
         await peerConnection.addIceCandidate(pendingRemoteIce.shift());
       }
-    };
+    });
 
-    // --- Game ---
-
-    const ball = { x: 300, y: 300, vx: 0, vy: 0 };
-    let tiltX = 0; // gamma = left/right
-    let tiltY = 0; // beta  = forward/back
-
-    const onTiltData = (beta, gamma) => {
-      tiltY = beta  ?? 0;
-      tiltX = gamma ?? 0;
-    };
-
-    const startGame = () => {
-      ball.x = 300; // start in middle lane
-      ball.y = $canvas.height - 60;
-      ball.vx = 0;
-      ball.vy = 0;
-      requestAnimationFrame(gameLoop);
+    socket.on('peerIce', async (myId, candidate, peerId) => {
+      if (!candidate) return;
+      if (!peerConnection) { pendingRemoteIce.push(candidate); return; }
+      await peerConnection.addIceCandidate(candidate);
+    });
   };
 
-    const gameLoop = () => {
-      update();
-      draw();
-      requestAnimationFrame(gameLoop);
+  // --- WebRTC ---
+  const answerOffer = async (offer, peerId) => {
+    if (peerConnection) peerConnection.close();
+    pendingRemoteIce.length = 0;
+    peerConnection = new RTCPeerConnection(servers);
+    peerConnection.onicecandidate = event => {
+      if (!event.candidate) return;
+      socket.emit('peerIce', peerId, event.candidate);
     };
-
-    const update = () => {
-      ball.vx += tiltX * 0.3;
-      ball.vx *= 0.95;
-      ball.x += ball.vx;
-      ball.x = Math.max(100, Math.min(500, ball.x));
-      ball.y = $canvas.height - 60; // fixed near bottom
+    peerConnection.ondatachannel = event => {
+      dataChannel = event.channel;
+      dataChannel.onopen = () => {
+        $status.textContent = 'controller connected ✓';
+        $setup.style.display = 'none';
+        $canvas.style.display = 'block';
+        startGame();
+      };
+      dataChannel.onmessage = event => {
+        const { beta, gamma } = JSON.parse(event.data);
+        onTiltData(beta, gamma);
+      };
     };
+    await peerConnection.setRemoteDescription(offer);
+    const answer = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answer);
+    socket.emit('peerAnswer', peerId, answer);
+    while (pendingRemoteIce.length) {
+      await peerConnection.addIceCandidate(pendingRemoteIce.shift());
+    }
+  };
 
-    const draw = () => {
-      ctx.clearRect(0, 0, $canvas.width, $canvas.height);
+  // --- Game ---
+  const ball = { x: 300, y: 540, vx: 0, vy: 0 };
+  const laneX = [100, 300, 500];
+  let obstacles = [];
+  let tiltX = 0;
+  let tiltY = 0;
 
-      // Background
-      ctx.fillStyle = '#1a1a2e';
-      ctx.fillRect(0, 0, $canvas.width, $canvas.height);
+  const onTiltData = (beta, gamma) => {
+    tiltY = beta  ?? 0;
+    tiltX = gamma ?? 0;
+  };
 
-      // Lane dividers
-      ctx.strokeStyle = '#333';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(200, 0);
-      ctx.lineTo(200, $canvas.height);
-      ctx.stroke();
+  const spawnObstacle = () => {
+    const lane = Math.floor(Math.random() * 3);
+    obstacles.push({
+      x: laneX[lane] - 30,
+      y: -60,
+      width: 60,
+      height: 30,
+      speed: 3
+    });
+  };
 
-      ctx.beginPath();
-      ctx.moveTo(400, 0);
-      ctx.lineTo(400, $canvas.height);
-      ctx.stroke();
+  const startGame = () => {
+  ball.x = 300;
+  ball.y = $canvas.height - 60;
+  ball.vx = 0;
+  ball.vy = 0;
+  setInterval(spawnObstacle, 1500); // spawn every 1.5 seconds
+  requestAnimationFrame(gameLoop);
+};
 
-      // Ball
-      ctx.beginPath();
-      ctx.arc(ball.x, ball.y, 20, 0, Math.PI * 2);
-      ctx.fillStyle = '#e94560';
-      ctx.fill();
-    };
+  const gameLoop = () => {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+  };
 
-    initSocket();
+  const update = () => {
+    ball.vx += tiltX * 0.3;
+    ball.vx *= 0.95;
+    ball.x += ball.vx;
+    ball.x = Math.max(100, Math.min(500, ball.x));
+    ball.y = $canvas.height - 60;
 
-  </script>
+    // Move obstacles down and remove off-screen ones
+    obstacles.forEach(ob => ob.y += ob.speed);
+    obstacles = obstacles.filter(ob => ob.y < $canvas.height);
+  };
+
+  const draw = () => {
+    ctx.clearRect(0, 0, $canvas.width, $canvas.height);
+
+    // Background
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(0, 0, $canvas.width, $canvas.height);
+
+    // Lane dividers
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(200, 0);
+    ctx.lineTo(200, $canvas.height);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(400, 0);
+    ctx.lineTo(400, $canvas.height);
+    ctx.stroke();
+
+    // Obstacles
+    ctx.fillStyle = '#f5a623';
+    obstacles.forEach(ob => {
+      ctx.fillRect(ob.x, ob.y, ob.width, ob.height);
+    });
+
+    // Ball
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, 20, 0, Math.PI * 2);
+    ctx.fillStyle = '#e94560';
+    ctx.fill();
+  };
+
+  initSocket();
+</script>
 </body>
 </html>
