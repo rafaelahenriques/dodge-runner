@@ -15,6 +15,46 @@ Do not use `localhost` — the QR code won't work on your phone from there. The 
 
 ---
 
+## Requirements
+
+- Node.js v18 or higher
+- A phone and laptop on the same WiFi network
+- `openssl` installed (comes with macOS and most Linux systems)
+
+---
+
+## HTTPS setup
+
+The phone needs HTTPS to access the gyroscope. Run this once in the project root to generate a self-signed certificate:
+
+```bash
+openssl req -x509 -out localhost.crt -keyout localhost.key \
+  -newkey rsa:2048 -nodes -sha256 \
+  -subj '/CN=localhost' -extensions EXT -config <( \
+   printf "[dn]\nCN=localhost\n[req]\ndistinguished_name = dn\n[EXT]\nsubjectAltName=DNS:localhost\nkeyUsage=digitalSignature\nextendedKeyUsage=serverAuth")
+```
+
+Then create a `.env` file in the project root:
+
+```
+NODE_ENV=development
+```
+
+---
+
+## How to play
+
+1. Open the desktop URL in your browser (printed in the terminal after `npm start`)
+2. Click anywhere on the page to unlock sound
+3. Scan the QR code with your phone
+4. Tap "Enable Motion" on your phone
+5. Tilt your phone left and right to move the ball between lanes
+6. Dodge the orange obstacles falling from the top
+7. You have 3 lives — obstacles turn red when hit
+8. When all lives are gone, tilt to restart
+
+---
+
 ## Development Diary
 
 ### Week 1 — Getting the pipeline working
@@ -53,16 +93,38 @@ The runner loop is now visible. Next up: collision detection and scoring.
 
 ---
 
+### Week 4 — Refactoring, collision, and game feel
+
+This week was about cleaning up the code and making the game actually playable.
+
+The first change was simplifying the signalling server. The original `index.js` had three separate socket events (`peerOffer`, `peerAnswer`, `peerIce`) to handle the WebRTC handshake. These were replaced with a single `signal` event that just relays whatever it receives to the target peer — the server doesn't need to know what type of signal it is. This went on `feature/simplify-signalling`.
+
+The client-side WebRTC code got the same treatment. All the manual `RTCPeerConnection` setup — ICE candidates, offers, answers, data channel creation — was replaced with SimplePeer, a lightweight library that wraps all of that into a few lines. This worked cleanly with the new single `signal` event. Both `index.html` and `controller.html` got significantly shorter and easier to read. This went on `feature/simplepeer` but was committed together with the server change.
+
+Collision detection was added on `feature/collision`. Rather than using a physics library, the check is done manually with a circle-rectangle algorithm: find the closest point on the rectangle to the ball center, then check if the distance is within the ball's radius. Three lines of math, no dependencies.
+
+On `feature/lives`, three lives were added so the game doesn't end on the first hit. Obstacles turn red when hit. The game over screen now stays visible for 3 seconds before showing the restart prompt, giving the player time to read their score. Restarting is done by tilting the phone.
+
+Finally, on `feature/sound`, a collision sound effect was added using the Web Audio API. Browsers block audio until the user interacts with the page, so a click listener silently unlocks the audio on first interaction before any gameplay starts.
+
+---
+
 ## AI Reflection
 
 I used Claude (Anthropic) as an assistant throughout this project.
 
-The parts that were close to the class material — such as the server setup, Socket.io signalling, and QR code generation — followed patterns we had already seen. For areas that went beyond the examples, like setting up a WebRTC data channel and handling iOS motion permissions, I used AI to help explore implementation details and understand how the pieces fit together.
+Some parts were written with significant AI help. The HTTPS server configuration — loading the certificate, the `isDevelopment` check, switching between `http` and `https` — was mostly AI-generated after I explained what I needed. The obstacle system (`spawnObstacle`, the lane positions, the spawn interval) was also largely written by AI, though built up step by step with explanations along the way. Same for the rewrite of `update` and `draw` when the game concept shifted to a runner.
 
-AI was helpful for speeding up development and getting unstuck when working with unfamiliar APIs. At the same time, the iOS permission issue was a good reminder that not every problem is a code bug. Understanding why something fails and reasoning about platform constraints still required manual investigation and critical thinking beyond what AI could directly provide.
+What helped most in those moments wasn't just getting the code — it was being asked questions before and after. Things like "what do you think this line does?" or "why would passing the same array reference cause a problem?" That approach forced me to think through the logic rather than just copy a solution. By the time the code was written, I understood why it worked.
 
-Some parts were written with significant AI help. The obstacle system (`spawnObstacle`, the lane positions, the spawn interval) was largely written by AI, though built up step by step with explanations along the way. Same for the rewrite of `update` and `draw` when the game concept shifted to a runner.
+For the signalling and WebRTC setup, I followed class patterns closely and used AI more to fill in gaps and debug than to write from scratch.
 
-What helped most in those moments wasn't just getting the code — it was being asked questions before and after. Things like "what do you think this line does?". That approach forced me to think through the logic rather than just copy a solution. By the time the code was written, I understood why it worked.
+AI also helped with scoping. When I was deciding on a game concept, talking through the options — what was realistic, what fit the controls, what was too complex — saved time and helped me avoid overbuilding.
+
+The iOS permission issue was a good example of where AI couldn't help directly. That required actually reading error messages, testing on the device, and reasoning about platform constraints. No prompt was going to find that.
+
+In week 4, AI helped in a few specific places. The collision detection function was written with AI — the circle-rectangle math is not something you would reach for immediately, and AI explained the logic behind finding the closest point on a rectangle before writing it. The SimplePeer refactor was also largely AI-driven, though the reasoning behind it (simpler signalling, less boilerplate) was discussed and made sense before touching the code.
+
+Debugging was another area where AI was useful. At one point the WebRTC connection stopped working after the refactor — the desktop peer was being created too early, before any signal arrived, which caused a "wrong state" error. AI helped identify the issue and explained why creating the peer lazily (only on first signal) fixed it. The audio autoplay error was similar — the browser blocking sound without user interaction was not obvious at first, and AI pointed to the fix quickly.
 
 The most useful thing overall was using AI to understand, not just to produce.
