@@ -64,6 +64,9 @@ canvas {
   let tiltY = 0;
   let gameOver = false;
   let score = 0;
+  let lives = 3;
+  let gameOverTimer = 0;
+  const GAME_OVER_DURATION = 180; // 3 seconds at 60fps
 
   // --- Collision ---
   const circleHitsRect = (ball, ob) => {
@@ -83,7 +86,8 @@ canvas {
       y: -60,
       width: 60,
       height: 30,
-      speed: 3
+      speed: 3,
+      hit: false
     });
   };
 
@@ -94,7 +98,9 @@ canvas {
     ball.vy = 0;
     obstacles = [];
     score = 0;
+    lives = 3;
     gameOver = false;
+    gameOverTimer = 0;
   };
 
   const startGame = () => {
@@ -110,7 +116,13 @@ canvas {
   };
 
   const update = () => {
-    if (gameOver) return;
+    if (gameOver) {
+      gameOverTimer++;
+      if (gameOverTimer > GAME_OVER_DURATION && Math.abs(tiltX) > 5) {
+        resetGame();
+      }
+      return;
+    }
 
     ball.vx += tiltX * 0.3;
     ball.vx *= 0.95;
@@ -124,8 +136,13 @@ canvas {
     score++;
 
     obstacles.forEach(ob => {
-      if (circleHitsRect(ball, ob)) {
-        gameOver = true;
+      if (!ob.hit && circleHitsRect(ball, ob)) {
+        ob.hit = true;
+        lives--;
+        if (lives <= 0) {
+          gameOver = true;
+          gameOverTimer = 0;
+        }
       }
     });
   };
@@ -147,9 +164,13 @@ canvas {
     ctx.lineTo(400, $canvas.height);
     ctx.stroke();
 
-    ctx.fillStyle = '#f5a623';
-    obstacles.forEach(ob => ctx.fillRect(ob.x, ob.y, ob.width, ob.height));
+    // Obstacles — red if hit, orange if not
+    obstacles.forEach(ob => {
+      ctx.fillStyle = ob.hit ? '#e94560' : '#f5a623';
+      ctx.fillRect(ob.x, ob.y, ob.width, ob.height);
+    });
 
+    // Ball
     ctx.beginPath();
     ctx.arc(ball.x, ball.y, 20, 0, Math.PI * 2);
     ctx.fillStyle = '#e94560';
@@ -160,9 +181,12 @@ canvas {
     ctx.font = '16px sans-serif';
     ctx.fillText(`Score: ${Math.floor(score / 60)}`, 10, 24);
 
+    // Lives
+    ctx.fillText(`Lives: ${'❤️'.repeat(lives)}`, 10, 48);
+
     // Game over screen
     if (gameOver) {
-      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
       ctx.fillRect(0, 0, $canvas.width, $canvas.height);
       ctx.fillStyle = '#fff';
       ctx.font = 'bold 36px sans-serif';
@@ -170,12 +194,11 @@ canvas {
       ctx.fillText('Game Over', $canvas.width / 2, $canvas.height / 2 - 20);
       ctx.font = '20px sans-serif';
       ctx.fillText(`Score: ${Math.floor(score / 60)}`, $canvas.width / 2, $canvas.height / 2 + 20);
-      ctx.font = '16px sans-serif';
-      ctx.fillText('Tilt to restart', $canvas.width / 2, $canvas.height / 2 + 60);
+      if (gameOverTimer > GAME_OVER_DURATION) {
+        ctx.font = '16px sans-serif';
+        ctx.fillText('Tilt to restart', $canvas.width / 2, $canvas.height / 2 + 60);
+      }
       ctx.textAlign = 'left';
-
-      // Restart on tilt
-      if (Math.abs(tiltX) > 5) resetGame();
     }
   };
 
