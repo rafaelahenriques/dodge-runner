@@ -62,9 +62,21 @@ canvas {
   let obstacles = [];
   let tiltX = 0;
   let tiltY = 0;
+  let gameOver = false;
+  let score = 0;
+
+  // --- Collision ---
+  const circleHitsRect = (ball, ob) => {
+    const closestX = Math.max(ob.x, Math.min(ball.x, ob.x + ob.width));
+    const closestY = Math.max(ob.y, Math.min(ball.y, ob.y + ob.height));
+    const dx = ball.x - closestX;
+    const dy = ball.y - closestY;
+    return (dx * dx + dy * dy) < (20 * 20);
+  };
 
   // --- Game ---
   const spawnObstacle = () => {
+    if (gameOver) return;
     const lane = Math.floor(Math.random() * 3);
     obstacles.push({
       x: laneX[lane] - 30,
@@ -75,11 +87,18 @@ canvas {
     });
   };
 
-  const startGame = () => {
+  const resetGame = () => {
     ball.x = 300;
     ball.y = $canvas.height - 60;
     ball.vx = 0;
     ball.vy = 0;
+    obstacles = [];
+    score = 0;
+    gameOver = false;
+  };
+
+  const startGame = () => {
+    resetGame();
     setInterval(spawnObstacle, 1500);
     requestAnimationFrame(gameLoop);
   };
@@ -91,19 +110,32 @@ canvas {
   };
 
   const update = () => {
+    if (gameOver) return;
+
     ball.vx += tiltX * 0.3;
     ball.vx *= 0.95;
     ball.x += ball.vx;
     ball.x = Math.max(100, Math.min(500, ball.x));
     ball.y = $canvas.height - 60;
+
     obstacles.forEach(ob => ob.y += ob.speed);
     obstacles = obstacles.filter(ob => ob.y < $canvas.height);
+
+    score++;
+
+    obstacles.forEach(ob => {
+      if (circleHitsRect(ball, ob)) {
+        gameOver = true;
+      }
+    });
   };
 
   const draw = () => {
     ctx.clearRect(0, 0, $canvas.width, $canvas.height);
+
     ctx.fillStyle = '#1a1a2e';
     ctx.fillRect(0, 0, $canvas.width, $canvas.height);
+
     ctx.strokeStyle = '#333';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -114,12 +146,37 @@ canvas {
     ctx.moveTo(400, 0);
     ctx.lineTo(400, $canvas.height);
     ctx.stroke();
+
     ctx.fillStyle = '#f5a623';
     obstacles.forEach(ob => ctx.fillRect(ob.x, ob.y, ob.width, ob.height));
+
     ctx.beginPath();
     ctx.arc(ball.x, ball.y, 20, 0, Math.PI * 2);
     ctx.fillStyle = '#e94560';
     ctx.fill();
+
+    // Score
+    ctx.fillStyle = '#fff';
+    ctx.font = '16px sans-serif';
+    ctx.fillText(`Score: ${Math.floor(score / 60)}`, 10, 24);
+
+    // Game over screen
+    if (gameOver) {
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(0, 0, $canvas.width, $canvas.height);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 36px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Game Over', $canvas.width / 2, $canvas.height / 2 - 20);
+      ctx.font = '20px sans-serif';
+      ctx.fillText(`Score: ${Math.floor(score / 60)}`, $canvas.width / 2, $canvas.height / 2 + 20);
+      ctx.font = '16px sans-serif';
+      ctx.fillText('Tilt to restart', $canvas.width / 2, $canvas.height / 2 + 60);
+      ctx.textAlign = 'left';
+
+      // Restart on tilt
+      if (Math.abs(tiltX) > 5) resetGame();
+    }
   };
 
   // --- Socket + SimplePeer ---
