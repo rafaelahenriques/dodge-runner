@@ -66,7 +66,22 @@ canvas {
   let score = 0;
   let lives = 3;
   let gameOverTimer = 0;
-  const GAME_OVER_DURATION = 180; // 3 seconds at 60fps
+  const GAME_OVER_DURATION = 180;
+
+  // --- Audio ---
+  const collisionSound = new Audio('/collision.mp3');
+  let audioUnlocked = false;
+
+  const unlockAudio = () => {
+    collisionSound.play().then(() => {
+      collisionSound.pause();
+      collisionSound.currentTime = 0;
+      audioUnlocked = true;
+    }).catch(() => {});
+    document.removeEventListener('click', unlockAudio);
+  };
+
+  document.addEventListener('click', unlockAudio);
 
   // --- Collision ---
   const circleHitsRect = (ball, ob) => {
@@ -138,6 +153,8 @@ canvas {
     obstacles.forEach(ob => {
       if (!ob.hit && circleHitsRect(ball, ob)) {
         ob.hit = true;
+        collisionSound.currentTime = 0;
+        collisionSound.play();
         lives--;
         if (lives <= 0) {
           gameOver = true;
@@ -164,27 +181,21 @@ canvas {
     ctx.lineTo(400, $canvas.height);
     ctx.stroke();
 
-    // Obstacles — red if hit, orange if not
     obstacles.forEach(ob => {
       ctx.fillStyle = ob.hit ? '#e94560' : '#f5a623';
       ctx.fillRect(ob.x, ob.y, ob.width, ob.height);
     });
 
-    // Ball
     ctx.beginPath();
     ctx.arc(ball.x, ball.y, 20, 0, Math.PI * 2);
     ctx.fillStyle = '#e94560';
     ctx.fill();
 
-    // Score
     ctx.fillStyle = '#fff';
     ctx.font = '16px sans-serif';
     ctx.fillText(`Score: ${Math.floor(score / 60)}`, 10, 24);
-
-    // Lives
     ctx.fillText(`Lives: ${'❤️'.repeat(lives)}`, 10, 48);
 
-    // Game over screen
     if (gameOver) {
       ctx.fillStyle = 'rgba(0,0,0,0.7)';
       ctx.fillRect(0, 0, $canvas.width, $canvas.height);
