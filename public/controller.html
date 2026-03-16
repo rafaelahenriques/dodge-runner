@@ -1,145 +1,86 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Controller</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-      background: #0f0f0f;
-      color: #fff;
-      font-family: sans-serif;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
-      gap: 1rem;
-      text-align: center;
-    }
-
-    h1 { font-size: 1.4rem; }
-    p  { opacity: 0.5; font-size: 0.85rem; padding: 0 2rem; }
-
-    #status {
-      font-size: 0.85rem;
-      opacity: 0.4;
-    }
-
-    #tiltDisplay {
-      font-size: 0.8rem;
-      opacity: 0.3;
-    }
-
-    #permissionBtn {
-      padding: 0.8rem 2rem;
-      background: #e94560;
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      font-size: 1rem;
-      cursor: pointer;
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Controller</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #0f0f0f;
+  color: #fff;
+  font-family: sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  gap: 1rem;
+  text-align: center;
+}
+h1 { font-size: 1.4rem; }
+p  { opacity: 0.5; font-size: 0.85rem; padding: 0 2rem; }
+#status { font-size: 0.85rem; opacity: 0.4; }
+#tiltDisplay { font-size: 0.8rem; opacity: 0.3; }
+#permissionBtn {
+  padding: 0.8rem 2rem;
+  background: #e94560;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+</style>
 </head>
 <body>
+<h1> Controller</h1>
+<p>Tilt your phone to control the ball on the desktop.</p>
+<button id="permissionBtn">Enable Motion</button>
+<span id="status">not connected</span>
+<span id="tiltDisplay">β: 0 | γ: 0</span>
+<script src="/socket.io/socket.io.js"></script>
+<script src="https://unpkg.com/simple-peer/simplepeer.min.js"></script>
+<script>
+  const $status       = document.getElementById('status');
+  const $tiltDisplay  = document.getElementById('tiltDisplay');
+  const $permissionBtn = document.getElementById('permissionBtn');
 
-  <h1>🎮 Controller</h1>
-  <p>Tilt your phone to control the ball on the desktop.</p>
+  const getUrlParam = name => {
+    const regex = new RegExp(`[?&]${name}=([^&#]*)`);
+    const result = regex.exec(location.search);
+    return result ? decodeURIComponent(result[1]) : null;
+  };
 
-  <button id="permissionBtn">Enable Motion</button>
-  <span id="status">not connected</span>
-  <span id="tiltDisplay">β: 0 | γ: 0</span>
+  const init = () => {
+    const targetId = getUrlParam('id');
+    if (!targetId) {
+      $status.textContent = 'missing ?id — scan QR again';
+      return;
+    }
 
-  <script src="/socket.io/socket.io.js"></script>
-  <script type="module">
+    const socket = io.connect('/');
+    let peer;
 
-    const $status      = document.getElementById('status');
-    const $tiltDisplay = document.getElementById('tiltDisplay');
-    const $permissionBtn = document.getElementById('permissionBtn');
+    socket.on('connect', () => {
+      peer = new SimplePeer({ initiator: true, trickle: true });
 
-    let socket;
-    let peerConnection;
-    let dataChannel;
-    const pendingRemoteIce = [];
-
-    const servers = {
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-    };
-
-    // Get target desktop ID from URL ?id=
-    const getUrlParam = name => {
-      const regex = new RegExp(`[?&]${name}=([^&#]*)`);
-      const result = regex.exec(location.search);
-      return result ? decodeURIComponent(result[1]) : null;
-    };
-
-    // --- Socket signalling ---
-
-    const initSocket = (targetId) => {
-      socket = io.connect('/');
-
-      socket.on('connect', () => {
-        console.log(`Connected: ${socket.id}`);
-        $status.textContent = 'signalling...';
-        initPeerConnection(targetId);
+      peer.on('signal', data => {
+        socket.emit('signal', targetId, data);
       });
 
-      socket.on('peerAnswer', async (myId, answer, peerId) => {
-        if (!peerConnection || !answer) return;
-        await peerConnection.setRemoteDescription(answer);
-        while (pendingRemoteIce.length) {
-          await peerConnection.addIceCandidate(pendingRemoteIce.shift());
-        }
+      socket.on('signal', (myId, data) => {
+        peer.signal(data);
       });
 
-      socket.on('peerIce', async (myId, candidate, peerId) => {
-        if (!candidate) return;
-        if (!peerConnection) { pendingRemoteIce.push(candidate); return; }
-        await peerConnection.addIceCandidate(candidate);
-      });
-    };
-
-    // --- WebRTC: initiate connection + open data channel ---
-
-    const initPeerConnection = async (targetId) => {
-      peerConnection = new RTCPeerConnection(servers);
-
-      peerConnection.onicecandidate = event => {
-        if (!event.candidate) return;
-        socket.emit('peerIce', targetId, event.candidate);
-      };
-
-      // Controller is the initiator — it creates the data channel
-      dataChannel = peerConnection.createDataChannel('tilt');
-
-      dataChannel.onopen = () => {
-        console.log('Data channel open');
+      peer.on('connect', () => {
         $status.textContent = 'connected ✓';
-      };
+      });
 
-      dataChannel.onclose = () => {
-        $status.textContent = 'disconnected';
-      };
+      peer.on('error', err => console.error(err));
+    });
 
-      const offer = await peerConnection.createOffer();
-      await peerConnection.setLocalDescription(offer);
-      socket.emit('peerOffer', targetId, offer);
-    };
-
-    // --- Device orientation (gyroscope) ---
-
-    const sendTilt = ({ beta, gamma }) => {
-      if (!dataChannel || dataChannel.readyState !== 'open') return;
-      const payload = JSON.stringify({ beta: Math.round(beta), gamma: Math.round(gamma) });
-      dataChannel.send(payload);
-      $tiltDisplay.textContent = `β: ${Math.round(beta)} | γ: ${Math.round(gamma)}`;
-    };
-
-    const startMotion = async () => {
-      // iOS 13+ requires explicit permission
+    $permissionBtn.addEventListener('click', async () => {
       if (typeof DeviceOrientationEvent?.requestPermission === 'function') {
         const permission = await DeviceOrientationEvent.requestPermission();
         if (permission !== 'granted') {
@@ -147,24 +88,17 @@
           return;
         }
       }
-      window.addEventListener('deviceorientation', sendTilt);
+      window.addEventListener('deviceorientation', ({ beta, gamma }) => {
+        if (!peer || !peer.connected) return;
+        const payload = JSON.stringify({ beta: Math.round(beta), gamma: Math.round(gamma) });
+        peer.send(payload);
+        $tiltDisplay.textContent = `β: ${Math.round(beta)} | γ: ${Math.round(gamma)}`;
+      });
       $permissionBtn.style.display = 'none';
-    };
+    });
+  };
 
-    // --- Init ---
-
-    const init = () => {
-      const targetId = getUrlParam('id');
-      if (!targetId) {
-        $status.textContent = 'missing ?id — scan QR again';
-        return;
-      }
-      $permissionBtn.addEventListener('click', startMotion);
-      initSocket(targetId);
-    };
-
-    init();
-
-  </script>
+  init();
+</script>
 </body>
 </html>
