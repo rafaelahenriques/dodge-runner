@@ -33,20 +33,9 @@ io.on('connection', socket => {
   console.log(`A user connected: ${socket.id}`);
   emitClientList();
 
-  socket.on('peerOffer', (peerId, offer) => {
-    if (!peerId || !offer) return;
-    socket.to(peerId).emit('peerOffer', peerId, offer, socket.id);
-  });
-  
-  socket.on('peerAnswer', (peerId, answer) => {
-    if (!peerId || !answer) return;
-    socket.to(peerId).emit('peerAnswer', peerId, answer, socket.id);
-  });
-
-  socket.on('peerIce', (peerId, candidate) => {
-    if (!peerId || !candidate) return;
-    socket.to(peerId).emit('peerIce', peerId, candidate, socket.id);
-  });
+  socket.on('signal', (peerId, signal) => {
+  io.to(peerId).emit('signal', peerId, signal, socket.id);
+});
 
   socket.on('disconnect', () => {
     console.log(`User disconnected: ${socket.id}`);
