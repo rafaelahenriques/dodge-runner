@@ -4,45 +4,17 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Balance Game</title>
-<style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body {
-  background: #0f0f0f;
-  color: #fff;
-  font-family: sans-serif;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100vh;
-}
-#setup {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-}
-#setup p { opacity: 0.5; font-size: 0.9rem; }
-canvas {
-  display: none;
-  border: 2px solid #333;
-  border-radius: 8px;
-}
-#status {
-  position: absolute;
-  top: 1rem;
-  font-size: 0.85rem;
-  opacity: 0.4;
-}
-</style>
+<link rel="stylesheet" href="/style.css">
 </head>
 <body>
 <span id="status">waiting for controller...</span>
 <div id="setup">
+  <h1 class="game-title">DODGE<span>RUNNER</span></h1>
   <p>Scan to connect your phone</p>
   <div id="qr"></div>
   <a id="url" href=""></a>
 </div>
+
 <canvas id="gameCanvas" width="600" height="600"></canvas>
 <script src="/socket.io/socket.io.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"
@@ -164,14 +136,31 @@ canvas {
     });
   };
 
-  const draw = () => {
+ const draw = () => {
     ctx.clearRect(0, 0, $canvas.width, $canvas.height);
 
-    ctx.fillStyle = '#1a1a2e';
+    // Background
+    ctx.fillStyle = '#0a0a0a';
     ctx.fillRect(0, 0, $canvas.width, $canvas.height);
 
-    ctx.strokeStyle = '#333';
-    ctx.lineWidth = 2;
+    // Scanline effect
+    for (let y = 0; y < $canvas.height; y += 4) {
+      ctx.fillStyle = 'rgba(0,0,0,0.15)';
+      ctx.fillRect(0, y, $canvas.width, 2);
+    }
+
+    // Lane backgrounds
+    ctx.fillStyle = 'rgba(255,255,255,0.02)';
+    ctx.fillRect(0, 0, 200, $canvas.height);
+    ctx.fillStyle = 'rgba(255,255,255,0.04)';
+    ctx.fillRect(200, 0, 200, $canvas.height);
+    ctx.fillStyle = 'rgba(255,255,255,0.02)';
+    ctx.fillRect(400, 0, 200, $canvas.height);
+
+    // Lane dividers with glow
+    ctx.strokeStyle = 'rgba(0,255,255,0.3)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([10, 10]);
     ctx.beginPath();
     ctx.moveTo(200, 0);
     ctx.lineTo(200, $canvas.height);
@@ -180,34 +169,70 @@ canvas {
     ctx.moveTo(400, 0);
     ctx.lineTo(400, $canvas.height);
     ctx.stroke();
+    ctx.setLineDash([]);
 
+    // Obstacles
     obstacles.forEach(ob => {
-      ctx.fillStyle = ob.hit ? '#e94560' : '#f5a623';
+      const color = ob.hit ? '#e94560' : '#f5a623';
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 10;
+      ctx.fillStyle = color;
       ctx.fillRect(ob.x, ob.y, ob.width, ob.height);
+      // pixel border
+      ctx.strokeStyle = ob.hit ? '#ff8fa3' : '#ffd580';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(ob.x, ob.y, ob.width, ob.height);
+      ctx.shadowBlur = 0;
     });
 
+    // Ball with glow
+    ctx.shadowColor = '#e94560';
+    ctx.shadowBlur = 20;
+    ctx.fillStyle = '#e94560';
     ctx.beginPath();
     ctx.arc(ball.x, ball.y, 20, 0, Math.PI * 2);
-    ctx.fillStyle = '#e94560';
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Ball highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.beginPath();
+    ctx.arc(ball.x - 6, ball.y - 6, 6, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = '#fff';
-    ctx.font = '16px sans-serif';
-    ctx.fillText(`Score: ${Math.floor(score / 60)}`, 10, 24);
-    ctx.fillText(`Lives: ${'❤️'.repeat(lives)}`, 10, 48);
+    // Score and lives
+    ctx.font = '12px "Press Start 2P", monospace';
+    ctx.fillStyle = '#0ff';
+    ctx.shadowColor = '#0ff';
+    ctx.shadowBlur = 8;
+    ctx.fillText(`SCORE  ${Math.floor(score / 60)}`, 10, 24);
+    ctx.fillText(`LIVES  ${'♥ '.repeat(lives)}`, 10, 48);
+    ctx.shadowBlur = 0;
 
+    // Game over screen
     if (gameOver) {
-      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillStyle = 'rgba(0,0,0,0.85)';
       ctx.fillRect(0, 0, $canvas.width, $canvas.height);
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 36px sans-serif';
+
+      ctx.font = 'bold 24px "Press Start 2P", monospace';
+      ctx.fillStyle = '#e94560';
+      ctx.shadowColor = '#e94560';
+      ctx.shadowBlur = 20;
       ctx.textAlign = 'center';
-      ctx.fillText('Game Over', $canvas.width / 2, $canvas.height / 2 - 20);
-      ctx.font = '20px sans-serif';
-      ctx.fillText(`Score: ${Math.floor(score / 60)}`, $canvas.width / 2, $canvas.height / 2 + 20);
+      ctx.fillText('GAME OVER', $canvas.width / 2, $canvas.height / 2 - 30);
+
+      ctx.font = '14px "Press Start 2P", monospace';
+      ctx.fillStyle = '#fff';
+      ctx.shadowBlur = 0;
+      ctx.fillText(`SCORE  ${Math.floor(score / 60)}`, $canvas.width / 2, $canvas.height / 2 + 10);
+
       if (gameOverTimer > GAME_OVER_DURATION) {
-        ctx.font = '16px sans-serif';
-        ctx.fillText('Tilt to restart', $canvas.width / 2, $canvas.height / 2 + 60);
+        ctx.font = '10px "Press Start 2P", monospace';
+        ctx.fillStyle = '#0ff';
+        ctx.shadowColor = '#0ff';
+        ctx.shadowBlur = 8;
+        ctx.fillText('TILT TO RESTART', $canvas.width / 2, $canvas.height / 2 + 50);
+        ctx.shadowBlur = 0;
       }
       ctx.textAlign = 'left';
     }
