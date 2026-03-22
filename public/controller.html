@@ -54,9 +54,13 @@
 
       peer.on('data', data => {
         const msg = JSON.parse(data);
-        if (msg.type === 'showRestart') {
-          $restartBtn.style.display = 'block';
-        }
+       if (msg.type === 'showRestart') {
+  $restartBtn.style.display = 'block';
+} else if (msg.type === 'hit') {
+  window.navigator.vibrate?.(200);
+  document.body.style.background = '#e94560';
+  setTimeout(() => document.body.style.background = '', 200);
+}
       });
 
       peer.on('error', err => console.error(err));

@@ -31,6 +31,13 @@
   const $instructions = document.getElementById('instructions');
   const ctx           = $canvas.getContext('2d');
 
+  // --- Sprites ---
+  const ballImg = new Image();
+  ballImg.src = '/pitaya.png';
+
+  const flyImg = new Image();
+  flyImg.src = '/fly.png';
+
   const ball = { x: 300, y: 540, vx: 0, vy: 0 };
   const laneX = [100, 300, 500];
   let obstacles = [];
@@ -43,7 +50,7 @@
   const GAME_OVER_DURATION = 60;
 
   // --- Audio ---
-  const collisionSound = new Audio('/collision.mp3');
+  const collisionSound = new Audio('/fly.mp3');
 
   $startBtn.addEventListener('click', () => {
     collisionSound.play().then(() => {
@@ -72,8 +79,8 @@
       x: laneX[lane] - 30,
       y: -60,
       width: 60,
-      height: 30,
-      speed: 3,
+      height: 60,
+      speed:  4 + Math.floor(score / 300) * 0.5,
       hit: false
     });
   };
@@ -127,6 +134,7 @@
         ob.hit = true;
         collisionSound.currentTime = 0;
         collisionSound.play();
+        if (peer) peer.send(JSON.stringify({ type: 'hit' }));
         lives--;
         if (lives <= 0) {
           gameOver = true;
@@ -166,30 +174,15 @@
     ctx.stroke();
     ctx.setLineDash([]);
 
+    // Flies
     obstacles.forEach(ob => {
-      const color = ob.hit ? '#e94560' : '#f5a623';
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 10;
-      ctx.fillStyle = color;
-      ctx.fillRect(ob.x, ob.y, ob.width, ob.height);
-      ctx.strokeStyle = ob.hit ? '#ff8fa3' : '#ffd580';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(ob.x, ob.y, ob.width, ob.height);
-      ctx.shadowBlur = 0;
+      if (ob.hit) ctx.globalAlpha = 0.4;
+      ctx.drawImage(flyImg, ob.x, ob.y, ob.width, ob.height);
+      ctx.globalAlpha = 1;
     });
 
-    ctx.shadowColor = '#e94560';
-    ctx.shadowBlur = 20;
-    ctx.fillStyle = '#e94560';
-    ctx.beginPath();
-    ctx.arc(ball.x, ball.y, 20, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-
-    ctx.fillStyle = 'rgba(255,255,255,0.3)';
-    ctx.beginPath();
-    ctx.arc(ball.x - 6, ball.y - 6, 6, 0, Math.PI * 2);
-    ctx.fill();
+    // Pitaya
+    ctx.drawImage(ballImg, ball.x - 25, ball.y - 25, 50, 50);
 
     ctx.font = '12px "Press Start 2P", monospace';
     ctx.fillStyle = '#0ff';
@@ -286,8 +279,9 @@
         } else if (msg.type === 'restart') {
           resetGame();
         } else {
-          tiltY = msg.beta ?? 0;
-          tiltX = msg.gamma ?? 0;
+          const deadzone = (value, threshold = 3) => Math.abs(value) < threshold ? 0 : value;
+          tiltX = tiltX * 0.8 + deadzone(msg.gamma ?? 0) * 0.2;
+          tiltY = tiltY * 0.8 + deadzone(msg.beta ?? 0) * 0.2;
         }
       });
 
