@@ -122,11 +122,35 @@ canvas {
   image-rendering: pixelated;
 }
 
+#startBtn, #restartBtn {
+  padding: 1rem 2rem;
+  background: transparent;
+  color: #0ff;
+  border: 2px solid #0ff;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 0.6rem;
+  cursor: pointer;
+  text-shadow: 0 0 8px #0ff;
+  box-shadow: 0 0 10px #0ff, inset 0 0 10px rgba(0,255,255,0.1);
+  transition: all 0.1s;
+  animation: pulse-cyan 2s infinite;
+}
+
+#startBtn:hover, #restartBtn:hover {
+  background: #0ff;
+  color: #000;
+  box-shadow: 0 0 20px #0ff;
+}
+
 @keyframes flicker {
   0%, 95%, 100% { opacity: 1; }
   96% { opacity: 0.6; }
   97% { opacity: 1; }
   98% { opacity: 0.4; }
+}
+@keyframes pulse-cyan {
+  0%, 100% { box-shadow: 0 0 10px #0ff, inset 0 0 10px rgba(0,255,255,0.1); }
+  50% { box-shadow: 0 0 20px #0ff, inset 0 0 20px rgba(0,255,255,0.2); }
 }
 
 @keyframes pulse {

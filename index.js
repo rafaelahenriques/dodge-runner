@@ -34,11 +34,12 @@ io.on('connection', socket => {
   emitClientList();
 
   socket.on('signal', (peerId, signal) => {
-  io.to(peerId).emit('signal', peerId, signal, socket.id);
-});
+    io.to(peerId).emit('signal', peerId, signal, socket.id);
+  });
 
   socket.on('disconnect', () => {
     console.log(`User disconnected: ${socket.id}`);
+    io.emit('client-disconnect', socket.id);
     delete clients[socket.id];
     emitClientList();
   });

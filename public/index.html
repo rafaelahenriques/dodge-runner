@@ -3,18 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Balance Game</title>
+<title>Dodge Runner</title>
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
 <span id="status">waiting for controller...</span>
 <div id="setup">
-  <h1 class="game-title">DODGE<span>RUNNER</span></h1>
-  <p>Scan to connect your phone</p>
+  <h1 class="game-title">Dodge<span>Runner</span></h1>
+  <p id="instructions">Scan to connect your phone</p>
   <div id="qr"></div>
   <a id="url" href=""></a>
+  <button id="startBtn" style="display:none">START GAME</button>
 </div>
-
 <canvas id="gameCanvas" width="600" height="600"></canvas>
 <script src="/socket.io/socket.io.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"
@@ -22,12 +22,14 @@
   crossorigin="anonymous"></script>
 <script src="https://unpkg.com/simple-peer/simplepeer.min.js"></script>
 <script>
-  const $status  = document.getElementById('status');
-  const $setup   = document.getElementById('setup');
-  const $canvas  = document.getElementById('gameCanvas');
-  const $qr      = document.getElementById('qr');
-  const $url     = document.getElementById('url');
-  const ctx      = $canvas.getContext('2d');
+  const $status       = document.getElementById('status');
+  const $setup        = document.getElementById('setup');
+  const $canvas       = document.getElementById('gameCanvas');
+  const $qr           = document.getElementById('qr');
+  const $url          = document.getElementById('url');
+  const $startBtn     = document.getElementById('startBtn');
+  const $instructions = document.getElementById('instructions');
+  const ctx           = $canvas.getContext('2d');
 
   const ball = { x: 300, y: 540, vx: 0, vy: 0 };
   const laneX = [100, 300, 500];
@@ -38,22 +40,20 @@
   let score = 0;
   let lives = 3;
   let gameOverTimer = 0;
-  const GAME_OVER_DURATION = 180;
+  const GAME_OVER_DURATION = 60;
 
   // --- Audio ---
   const collisionSound = new Audio('/collision.mp3');
-  let audioUnlocked = false;
 
-  const unlockAudio = () => {
+  $startBtn.addEventListener('click', () => {
     collisionSound.play().then(() => {
       collisionSound.pause();
       collisionSound.currentTime = 0;
-      audioUnlocked = true;
     }).catch(() => {});
-    document.removeEventListener('click', unlockAudio);
-  };
-
-  document.addEventListener('click', unlockAudio);
+    $setup.style.display = 'none';
+    $canvas.style.display = 'block';
+    startGame();
+  });
 
   // --- Collision ---
   const circleHitsRect = (ball, ob) => {
@@ -105,8 +105,8 @@
   const update = () => {
     if (gameOver) {
       gameOverTimer++;
-      if (gameOverTimer > GAME_OVER_DURATION && Math.abs(tiltX) > 5) {
-        resetGame();
+      if (gameOverTimer === GAME_OVER_DURATION && peer) {
+        peer.send(JSON.stringify({ type: 'showRestart' }));
       }
       return;
     }
@@ -136,20 +136,16 @@
     });
   };
 
- const draw = () => {
+  const draw = () => {
     ctx.clearRect(0, 0, $canvas.width, $canvas.height);
-
-    // Background
     ctx.fillStyle = '#0a0a0a';
     ctx.fillRect(0, 0, $canvas.width, $canvas.height);
 
-    // Scanline effect
     for (let y = 0; y < $canvas.height; y += 4) {
       ctx.fillStyle = 'rgba(0,0,0,0.15)';
       ctx.fillRect(0, y, $canvas.width, 2);
     }
 
-    // Lane backgrounds
     ctx.fillStyle = 'rgba(255,255,255,0.02)';
     ctx.fillRect(0, 0, 200, $canvas.height);
     ctx.fillStyle = 'rgba(255,255,255,0.04)';
@@ -157,7 +153,6 @@
     ctx.fillStyle = 'rgba(255,255,255,0.02)';
     ctx.fillRect(400, 0, 200, $canvas.height);
 
-    // Lane dividers with glow
     ctx.strokeStyle = 'rgba(0,255,255,0.3)';
     ctx.lineWidth = 1;
     ctx.setLineDash([10, 10]);
@@ -171,21 +166,18 @@
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Obstacles
     obstacles.forEach(ob => {
       const color = ob.hit ? '#e94560' : '#f5a623';
       ctx.shadowColor = color;
       ctx.shadowBlur = 10;
       ctx.fillStyle = color;
       ctx.fillRect(ob.x, ob.y, ob.width, ob.height);
-      // pixel border
       ctx.strokeStyle = ob.hit ? '#ff8fa3' : '#ffd580';
       ctx.lineWidth = 2;
       ctx.strokeRect(ob.x, ob.y, ob.width, ob.height);
       ctx.shadowBlur = 0;
     });
 
-    // Ball with glow
     ctx.shadowColor = '#e94560';
     ctx.shadowBlur = 20;
     ctx.fillStyle = '#e94560';
@@ -194,13 +186,11 @@
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    // Ball highlight
     ctx.fillStyle = 'rgba(255,255,255,0.3)';
     ctx.beginPath();
     ctx.arc(ball.x - 6, ball.y - 6, 6, 0, Math.PI * 2);
     ctx.fill();
 
-    // Score and lives
     ctx.font = '12px "Press Start 2P", monospace';
     ctx.fillStyle = '#0ff';
     ctx.shadowColor = '#0ff';
@@ -209,29 +199,25 @@
     ctx.fillText(`LIVES  ${'♥ '.repeat(lives)}`, 10, 48);
     ctx.shadowBlur = 0;
 
-    // Game over screen
     if (gameOver) {
       ctx.fillStyle = 'rgba(0,0,0,0.85)';
       ctx.fillRect(0, 0, $canvas.width, $canvas.height);
-
       ctx.font = 'bold 24px "Press Start 2P", monospace';
       ctx.fillStyle = '#e94560';
       ctx.shadowColor = '#e94560';
       ctx.shadowBlur = 20;
       ctx.textAlign = 'center';
       ctx.fillText('GAME OVER', $canvas.width / 2, $canvas.height / 2 - 30);
-
       ctx.font = '14px "Press Start 2P", monospace';
       ctx.fillStyle = '#fff';
       ctx.shadowBlur = 0;
       ctx.fillText(`SCORE  ${Math.floor(score / 60)}`, $canvas.width / 2, $canvas.height / 2 + 10);
-
       if (gameOverTimer > GAME_OVER_DURATION) {
         ctx.font = '10px "Press Start 2P", monospace';
         ctx.fillStyle = '#0ff';
         ctx.shadowColor = '#0ff';
         ctx.shadowBlur = 8;
-        ctx.fillText('TILT TO RESTART', $canvas.width / 2, $canvas.height / 2 + 50);
+        ctx.fillText('PRESS BUTTON ON PHONE', $canvas.width / 2, $canvas.height / 2 + 50);
         ctx.shadowBlur = 0;
       }
       ctx.textAlign = 'left';
@@ -252,6 +238,20 @@
     $qr.innerHTML = qr.createImgTag(4);
   });
 
+  socket.on('client-disconnect', (disconnectedId) => {
+    if (peer && disconnectedId !== socket.id) {
+      $status.textContent = 'waiting for controller...';
+      $setup.style.display = 'flex';
+      $qr.style.display = 'block';
+      $url.style.display = 'block';
+      $instructions.style.display = 'block';
+      $startBtn.style.display = 'none';
+      $canvas.style.display = 'none';
+      gameOver = true;
+      peer = null;
+    }
+  });
+
   socket.on('signal', (myId, data, controllerId) => {
     if (!peer) {
       peer = new SimplePeer({ initiator: false, trickle: true });
@@ -262,20 +262,37 @@
 
       peer.on('connect', () => {
         $status.textContent = 'controller connected ✓';
-        $setup.style.display = 'none';
-        $canvas.style.display = 'block';
-        startGame();
+      });
+
+      peer.on('close', () => {
+        $status.textContent = 'waiting for controller...';
+        $setup.style.display = 'flex';
+        $qr.style.display = 'block';
+        $url.style.display = 'block';
+        $instructions.style.display = 'block';
+        $startBtn.style.display = 'none';
+        $canvas.style.display = 'none';
+        gameOver = true;
+        peer = null;
       });
 
       peer.on('data', data => {
-        const { beta, gamma } = JSON.parse(data);
-        tiltY = beta  ?? 0;
-        tiltX = gamma ?? 0;
+        const msg = JSON.parse(data);
+        if (msg.type === 'motionReady') {
+          $qr.style.display = 'none';
+          $url.style.display = 'none';
+          $instructions.style.display = 'none';
+          $startBtn.style.display = 'block';
+        } else if (msg.type === 'restart') {
+          resetGame();
+        } else {
+          tiltY = msg.beta ?? 0;
+          tiltX = msg.gamma ?? 0;
+        }
       });
 
       peer.on('error', err => console.error(err));
     }
-
     peer.signal(data);
   });
 </script>

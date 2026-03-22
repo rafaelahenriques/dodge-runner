@@ -5,20 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Controller</title>
 <link rel="stylesheet" href="/style.css">
-
 </head>
 <body>
 <h1 class="controller-title">Controller</h1>
 <p>Tilt your phone to control the ball on the desktop.</p>
 <button id="permissionBtn">Enable Motion</button>
+<button id="restartBtn" style="display:none">RESTART</button>
 <span id="status">not connected</span>
 <span id="tiltDisplay">β: 0 | γ: 0</span>
 <script src="/socket.io/socket.io.js"></script>
 <script src="https://unpkg.com/simple-peer/simplepeer.min.js"></script>
 <script>
-  const $status       = document.getElementById('status');
-  const $tiltDisplay  = document.getElementById('tiltDisplay');
+  const $status        = document.getElementById('status');
+  const $tiltDisplay   = document.getElementById('tiltDisplay');
   const $permissionBtn = document.getElementById('permissionBtn');
+  const $restartBtn    = document.getElementById('restartBtn');
 
   const getUrlParam = name => {
     const regex = new RegExp(`[?&]${name}=([^&#]*)`);
@@ -51,7 +52,19 @@
         $status.textContent = 'connected ✓';
       });
 
+      peer.on('data', data => {
+        const msg = JSON.parse(data);
+        if (msg.type === 'showRestart') {
+          $restartBtn.style.display = 'block';
+        }
+      });
+
       peer.on('error', err => console.error(err));
+    });
+
+    $restartBtn.addEventListener('click', () => {
+      peer.send(JSON.stringify({ type: 'restart' }));
+      $restartBtn.style.display = 'none';
     });
 
     $permissionBtn.addEventListener('click', async () => {
@@ -64,11 +77,11 @@
       }
       window.addEventListener('deviceorientation', ({ beta, gamma }) => {
         if (!peer || !peer.connected) return;
-        const payload = JSON.stringify({ beta: Math.round(beta), gamma: Math.round(gamma) });
-        peer.send(payload);
+        peer.send(JSON.stringify({ type: 'tilt', beta: Math.round(beta), gamma: Math.round(gamma) }));
         $tiltDisplay.textContent = `β: ${Math.round(beta)} | γ: ${Math.round(gamma)}`;
       });
       $permissionBtn.style.display = 'none';
+      peer.send(JSON.stringify({ type: 'motionReady' }));
     });
   };
 
