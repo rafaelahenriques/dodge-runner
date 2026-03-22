@@ -32,11 +32,11 @@
   const ctx           = $canvas.getContext('2d');
 
   // --- Sprites ---
-  const ballImg = new Image();
-  ballImg.src = '/pitaya.png';
+const ballImg = new Image();
+ballImg.src = '/assets/pitaya.png';
 
-  const flyImg = new Image();
-  flyImg.src = '/fly.png';
+ const flyImg = new Image();
+flyImg.src = '/assets/fly.png';
 
   const ball = { x: 300, y: 540, vx: 0, vy: 0 };
   const laneX = [100, 300, 500];
@@ -50,7 +50,12 @@
   const GAME_OVER_DURATION = 60;
 
   // --- Audio ---
-  const collisionSound = new Audio('/fly.mp3');
+const collisionSound = new Audio('/assets/fly.mp3');
+  collisionSound.volume = 0.8;
+
+ const bgMusic = new Audio('/assets/background.mp3');
+  bgMusic.loop = true;
+  bgMusic.volume = 0.3;
 
   $startBtn.addEventListener('click', () => {
     collisionSound.play().then(() => {
@@ -80,25 +85,30 @@
       y: -60,
       width: 60,
       height: 60,
-      speed:  4 + Math.floor(score / 300) * 0.5,
+      speed: 4 + Math.floor(score / 300) * 0.5,
       hit: false
     });
   };
 
-  const resetGame = () => {
-    ball.x = 300;
-    ball.y = $canvas.height - 60;
-    ball.vx = 0;
-    ball.vy = 0;
-    obstacles = [];
-    score = 0;
-    lives = 3;
-    gameOver = false;
-    gameOverTimer = 0;
-  };
+const resetGame = () => {
+  ball.x = 300;
+  ball.y = $canvas.height - 60;
+  ball.vx = 0;
+  ball.vy = 0;
+  obstacles = [];
+  score = 0;
+  lives = 3;
+  gameOver = false;
+  gameOverTimer = 0;
+  bgMusic.currentTime = 0;
+  bgMusic.play().catch(() => {});
+  if (peer) peer.send(JSON.stringify({ type: 'musicResumed' })); // new line
+};
 
   const startGame = () => {
     resetGame();
+    bgMusic.play().catch(() => {});
+    if (peer) peer.send(JSON.stringify({ type: 'gameStarted' }));
     setInterval(spawnObstacle, 1500);
     requestAnimationFrame(gameLoop);
   };
@@ -174,14 +184,12 @@
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Flies
     obstacles.forEach(ob => {
       if (ob.hit) ctx.globalAlpha = 0.4;
       ctx.drawImage(flyImg, ob.x, ob.y, ob.width, ob.height);
       ctx.globalAlpha = 1;
     });
 
-    // Pitaya
     ctx.drawImage(ballImg, ball.x - 25, ball.y - 25, 50, 50);
 
     ctx.font = '12px "Press Start 2P", monospace';
@@ -240,6 +248,8 @@
       $instructions.style.display = 'block';
       $startBtn.style.display = 'none';
       $canvas.style.display = 'none';
+      bgMusic.pause();
+      bgMusic.currentTime = 0;
       gameOver = true;
       peer = null;
     }
@@ -265,6 +275,8 @@
         $instructions.style.display = 'block';
         $startBtn.style.display = 'none';
         $canvas.style.display = 'none';
+        bgMusic.pause();
+        bgMusic.currentTime = 0;
         gameOver = true;
         peer = null;
       });
@@ -278,6 +290,10 @@
           $startBtn.style.display = 'block';
         } else if (msg.type === 'restart') {
           resetGame();
+        } else if (msg.type === 'musicPlay') {
+          bgMusic.play();
+        } else if (msg.type === 'musicPause') {
+          bgMusic.pause();
         } else {
           const deadzone = (value, threshold = 3) => Math.abs(value) < threshold ? 0 : value;
           tiltX = tiltX * 0.8 + deadzone(msg.gamma ?? 0) * 0.2;
